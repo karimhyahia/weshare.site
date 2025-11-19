@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { Layout, Mail, Lock, ArrowRight, User, ArrowLeft, Github } from 'lucide-react';
+import { Layout, Mail, Lock, ArrowRight, User, ArrowLeft, Github, AlertCircle } from 'lucide-react';
 import { useLanguage } from '../LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
 
 interface AuthProps {
   mode: 'login' | 'signup';
@@ -12,19 +13,39 @@ interface AuthProps {
 
 export const Auth: React.FC<AuthProps> = ({ mode, onNavigate, onSuccess, onBack }) => {
   const { t } = useLanguage();
+  const { signUp, signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+    setError(null);
+
+    try {
+      if (mode === 'signup') {
+        const { error } = await signUp(email, password, name);
+        if (error) {
+          setError(error.message);
+        } else {
+          onSuccess();
+        }
+      } else {
+        const { error } = await signIn(email, password);
+        if (error) {
+          setError(error.message);
+        } else {
+          onSuccess();
+        }
+      }
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
       setLoading(false);
-      onSuccess();
-    }, 1500);
+    }
   };
 
   return (
@@ -57,14 +78,21 @@ export const Auth: React.FC<AuthProps> = ({ mode, onNavigate, onSuccess, onBack 
                     : t('auth.signupDesc')}
               </p>
 
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3 mb-6">
+                  <AlertCircle size={20} className="text-red-600 shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+              )}
+
               <form onSubmit={handleSubmit} className="space-y-4">
                  {mode === 'signup' && (
                     <div>
                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">{t('auth.fullName')}</label>
                        <div className="relative">
                           <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                          <input 
-                             type="text" 
+                          <input
+                             type="text"
                              required
                              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-slate-900 outline-none text-sm transition-all"
                              placeholder="Jane Doe"

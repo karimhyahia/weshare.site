@@ -1,72 +1,119 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layout as LayoutIcon, Share2, Smartphone, Monitor, ArrowLeft, Check, LogOut } from 'lucide-react';
 import { CardData, Tab, ViewMode } from './types';
-import { INITIAL_DATA, MOCK_SITES } from './constants';
+import { INITIAL_DATA } from './constants';
 import { Button } from './components/ui/Button';
 import { EditorPanel } from './components/EditorPanel';
 import { CardPreview } from './components/CardPreview';
 import { WebPreview } from './components/WebPreview';
 import { Dashboard } from './components/Dashboard';
 import { ShareModal } from './components/ShareModal';
+import { useAuth } from './contexts/AuthContext';
+import { sitesService } from './lib/database';
 
 interface AppProps {
     onLogout?: () => void;
 }
 
 const App: React.FC<AppProps> = ({ onLogout }) => {
-  // State
+  const { user } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
-  const [sites, setSites] = useState<CardData[]>(MOCK_SITES);
+  const [sites, setSites] = useState<CardData[]>([]);
   const [currentSiteId, setCurrentSiteId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   
   // Editor specific state (only relevant when viewMode === 'editor')
   const [activeTab, setActiveTab] = useState<Tab>('editor');
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [previewMode, setPreviewMode] = useState<'mobile' | 'desktop'>('mobile');
 
-  // Derived state
+  useEffect(() => {
+    if (user) {
+      loadSites();
+    }
+  }, [user]);
+
+  const loadSites = async () => {
+    if (!user) return;
+    try {
+      setLoading(true);
+      const data = await sitesService.getAll(user.id);
+      setSites(data);
+    } catch (error) {
+      console.error('Error loading sites:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const currentSite = sites.find(s => s.id === currentSiteId) || INITIAL_DATA;
 
-  // Handlers
   const handleEditSite = (id: string) => {
     setCurrentSiteId(id);
     setViewMode('editor');
   };
 
-  const handleCreateSite = () => {
-    const newId = Date.now().toString();
-    const newSite: CardData = {
+  const handleCreateSite = async () => {
+    if (!user) return;
+    try {
+      const newSite: CardData = {
         ...INITIAL_DATA,
-        id: newId,
+        id: '',
         internalName: 'New Untitled Site',
-        profile: { ...INITIAL_DATA.profile, name: 'Your Name' }
-    };
-    setSites([...sites, newSite]);
-    setCurrentSiteId(newId);
-    setViewMode('editor');
-  };
-
-  const handleUpdateSite = (updatedData: CardData) => {
-    setSites(prevSites => prevSites.map(site => site.id === updatedData.id ? updatedData : site));
-  };
-
-  const handleDeleteSite = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this site? This action cannot be undone.')) {
-        setSites(prev => prev.filter(s => s.id !== id));
+        profile: { ...INITIAL_DATA.profile, name: user.user_metadata?.full_name || 'Your Name' }
+      };
+      const created = await sitesService.create(user.id, newSite);
+      setSites([created, ...sites]);
+      setCurrentSiteId(created.id);
+      setViewMode('editor');
+    } catch (error) {
+      console.error('Error creating site:', error);
+      alert('Failed to create site. Please try again.');
     }
   };
 
-  const handleDuplicateSite = (id: string) => {
+  const handleUpdateSite = async (updatedData: CardData) => {
+    if (!user) return;
+    try {
+      await sitesService.update(updatedData.id, updatedData);
+      setSites(prevSites => prevSites.map(site => site.id === updatedData.id ? updatedData : site));
+    } catch (error) {
+      console.error('Error updating site:', error);
+      alert('Failed to update site. Please try again.');
+    }
+  };
+
+  const handleDeleteSite = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this site? This action cannot be undone.')) {
+      return;
+    }
+    try {
+      await sitesService.delete(id);
+      setSites(prev => prev.filter(s => s.id !== id));
+    } catch (error) {
+      console.error('Error deleting site:', error);
+      alert('Failed to delete site. Please try again.');
+    }
+  };
+
+  const handleDuplicateSite = async (id: string) => {
+    if (!user) return;
     const site = sites.find(s => s.id === id);
-    if (site) {
-        const newSite = {
-            ...site,
-            id: Date.now().toString(),
-            internalName: `${site.internalName} (Copy)`,
-            profile: { ...site.profile, name: `${site.profile.name} (Copy)` }
-        };
-        setSites(prev => [...prev, newSite]);
+    if (!site) return;
+
+    try {
+      const duplicatedSite = {
+        ...site,
+        id: '',
+        internalName: `${site.internalName} (Copy)`,
+        profile: { ...site.profile, name: `${site.profile.name} (Copy)` }
+      };
+      const created = await sitesService.create(user.id, duplicatedSite);
+      setSites([created, ...sites]);
+    } catch (error) {
+      console.error('Error duplicating site:', error);
+      alert('Failed to duplicate site. Please try again.');
     }
   };
 
@@ -77,14 +124,24 @@ const App: React.FC<AppProps> = ({ onLogout }) => {
 
   const toggleTab = (tab: Tab) => setActiveTab(tab);
 
-  // Render Dashboard View
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600 font-medium">Loading your sites...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (viewMode === 'dashboard') {
       return (
           <div className="min-h-screen font-sans text-slate-900 relative">
-              <Dashboard 
-                  sites={sites} 
-                  onEdit={handleEditSite} 
-                  onCreate={handleCreateSite} 
+              <Dashboard
+                  sites={sites}
+                  onEdit={handleEditSite}
+                  onCreate={handleCreateSite}
                   onDelete={handleDeleteSite}
                   onDuplicate={handleDuplicateSite}
                   onUpdate={handleUpdateSite}
