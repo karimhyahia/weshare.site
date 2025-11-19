@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Layout as LayoutIcon, Share2, Smartphone, Monitor, ArrowLeft, Check, LogOut } from 'lucide-react';
 import { CardData, Tab, ViewMode } from './types';
 import { INITIAL_DATA, MOCK_SITES } from './constants';
@@ -9,7 +9,6 @@ import { CardPreview } from './components/CardPreview';
 import { WebPreview } from './components/WebPreview';
 import { Dashboard } from './components/Dashboard';
 import { ShareModal } from './components/ShareModal';
-import { supabase } from './lib/supabase';
 
 interface AppProps {
     onLogout?: () => void;
@@ -18,10 +17,8 @@ interface AppProps {
 const App: React.FC<AppProps> = ({ onLogout }) => {
   // State
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
-  const [sites, setSites] = useState<CardData[]>([]);
+  const [sites, setSites] = useState<CardData[]>(MOCK_SITES);
   const [currentSiteId, setCurrentSiteId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
   
   // Editor specific state (only relevant when viewMode === 'editor')
   const [activeTab, setActiveTab] = useState<Tab>('editor');
@@ -31,109 +28,14 @@ const App: React.FC<AppProps> = ({ onLogout }) => {
   // Derived state
   const currentSite = sites.find(s => s.id === currentSiteId) || INITIAL_DATA;
 
-  // Load user and sites from database
-  useEffect(() => {
-    loadUserAndSites();
-  }, []);
-
-  const loadUserAndSites = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
-        await loadSites(user.id);
-      }
-    } catch (error) {
-      console.error('Error loading user:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadSites = async (uid: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('sites')
-        .select('*')
-        .eq('user_id', uid)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      if (data) {
-        const formattedSites: CardData[] = data.map(site => ({
-          id: site.id,
-          internalName: site.internal_name,
-          ...site.data
-        }));
-        setSites(formattedSites);
-      }
-    } catch (error) {
-      console.error('Error loading sites:', error);
-    }
-  };
-
-  const saveSite = async (siteData: CardData) => {
-    if (!userId) return;
-
-    try {
-      const { data: existingSite } = await supabase
-        .from('sites')
-        .select('id')
-        .eq('id', siteData.id)
-        .maybeSingle();
-
-      const payload = {
-        user_id: userId,
-        internal_name: siteData.internalName,
-        data: {
-          profile: siteData.profile,
-          company: siteData.company,
-          links: siteData.links,
-          services: siteData.services,
-          projects: siteData.projects,
-          video: siteData.video,
-          business: siteData.business,
-          contactForm: siteData.contactForm,
-          collectedContacts: siteData.collectedContacts,
-          analytics: siteData.analytics,
-          themeId: siteData.themeId,
-          customThemeColor: siteData.customThemeColor,
-          font: siteData.font,
-          qrColor: siteData.qrColor,
-          showQrLogo: siteData.showQrLogo,
-          enableMotion: siteData.enableMotion
-        },
-        is_published: true
-      };
-
-      if (existingSite) {
-        const { error } = await supabase
-          .from('sites')
-          .update(payload)
-          .eq('id', siteData.id);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('sites')
-          .insert([{ ...payload, id: siteData.id }]);
-
-        if (error) throw error;
-      }
-    } catch (error) {
-      console.error('Error saving site:', error);
-    }
-  };
-
   // Handlers
   const handleEditSite = (id: string) => {
     setCurrentSiteId(id);
     setViewMode('editor');
   };
 
-  const handleCreateSite = async () => {
-    const newId = crypto.randomUUID();
+  const handleCreateSite = () => {
+    const newId = Date.now().toString();
     const newSite: CardData = {
         ...INITIAL_DATA,
         id: newId,
@@ -143,41 +45,28 @@ const App: React.FC<AppProps> = ({ onLogout }) => {
     setSites([...sites, newSite]);
     setCurrentSiteId(newId);
     setViewMode('editor');
-    await saveSite(newSite);
   };
 
-  const handleUpdateSite = async (updatedData: CardData) => {
+  const handleUpdateSite = (updatedData: CardData) => {
     setSites(prevSites => prevSites.map(site => site.id === updatedData.id ? updatedData : site));
-    await saveSite(updatedData);
   };
 
-  const handleDeleteSite = async (id: string) => {
+  const handleDeleteSite = (id: string) => {
     if (window.confirm('Are you sure you want to delete this site? This action cannot be undone.')) {
-        try {
-          const { error } = await supabase
-            .from('sites')
-            .delete()
-            .eq('id', id);
-
-          if (error) throw error;
-          setSites(prev => prev.filter(s => s.id !== id));
-        } catch (error) {
-          console.error('Error deleting site:', error);
-        }
+        setSites(prev => prev.filter(s => s.id !== id));
     }
   };
 
-  const handleDuplicateSite = async (id: string) => {
+  const handleDuplicateSite = (id: string) => {
     const site = sites.find(s => s.id === id);
     if (site) {
         const newSite = {
             ...site,
-            id: crypto.randomUUID(),
+            id: Date.now().toString(),
             internalName: `${site.internalName} (Copy)`,
             profile: { ...site.profile, name: `${site.profile.name} (Copy)` }
         };
         setSites(prev => [...prev, newSite]);
-        await saveSite(newSite);
     }
   };
 
@@ -187,18 +76,6 @@ const App: React.FC<AppProps> = ({ onLogout }) => {
   };
 
   const toggleTab = (tab: Tab) => setActiveTab(tab);
-
-  // Show loading state
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-slate-300 border-t-slate-900 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
 
   // Render Dashboard View
   if (viewMode === 'dashboard') {
