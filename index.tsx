@@ -3,7 +3,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { Main } from './Main';
 import { LanguageProvider } from './LanguageContext';
-import { AuthProvider } from './contexts/AuthContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -13,10 +12,8 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <AuthProvider>
-      <LanguageProvider>
-        <Main />
-      </LanguageProvider>
-    </AuthProvider>
+    <LanguageProvider>
+      <Main />
+    </LanguageProvider>
   </React.StrictMode>
 );

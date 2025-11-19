@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { CardData, ContactSubmission } from '../types';
 import { CardPreview } from './CardPreview';
-import {
-  LayoutGrid, Users, PieChart, Settings, Plus, Search, Filter,
+import { 
+  LayoutGrid, Users, PieChart, Settings, Plus, Search, Filter, 
   MoreHorizontal, Edit, Eye, Share2, ArrowUpRight, Signal, SlidersHorizontal,
   Download, Mail, Phone, Calendar, ChevronRight, ArrowDownToLine,
   CreditCard, Lock, Bell, Shield, LogOut, CheckCircle2, Upload, Copy, Trash2, User
@@ -13,8 +13,6 @@ import { Input } from './ui/Input';
 import { ShareModal } from './ShareModal';
 import { useLanguage } from '../LanguageContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
-import { useAuth } from '../contexts/AuthContext';
-import { contactsService } from '../lib/database';
 
 interface DashboardProps {
   sites: CardData[];
@@ -28,33 +26,19 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ sites, onEdit, onCreate, onDelete, onDuplicate, onUpdate, onLogout }) => {
   const { t } = useLanguage();
-  const { user } = useAuth();
   const [activeView, setActiveView] = useState<'links' | 'contacts' | 'analytics' | 'settings'>('links');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [sharingSite, setSharingSite] = useState<CardData | null>(null);
-  const [userEmail, setUserEmail] = useState(user?.email || '');
-  const [userName, setUserName] = useState(user?.user_metadata?.full_name || '');
-  const [allContacts, setAllContacts] = useState<any[]>([]);
-  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [userEmail, setUserEmail] = useState('alex@example.com');
+  const [userName, setUserName] = useState('Alex Rivera');
 
-  useEffect(() => {
-    if (user && activeView === 'contacts') {
-      loadContacts();
-    }
-  }, [user, activeView]);
-
-  const loadContacts = async () => {
-    if (!user) return;
-    try {
-      setLoadingContacts(true);
-      const contacts = await contactsService.getAll(user.id);
-      setAllContacts(contacts);
-    } catch (error) {
-      console.error('Error loading contacts:', error);
-    } finally {
-      setLoadingContacts(false);
-    }
-  };
+  // --- Aggregated Data Helpers ---
+  const allContacts = sites.flatMap(site => 
+    (site.collectedContacts || []).map(contact => ({
+        ...contact,
+        source: site.internalName
+    }))
+  ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const totalViews = sites.reduce((acc, site) => acc + (site.analytics?.views || 0), 0);
   const totalClicks = sites.reduce((acc, site) => acc + (site.analytics?.clicks || 0), 0);
